@@ -3,6 +3,10 @@ from loss_functs import LOSS
 
 
 class ConvNeuralNet:
+    """
+    Esta clase se encarga de definir la estructura de la red neuronal convolucional.
+    """
+    
     def __init__(self, layers, loss, lr):
         self.set_layers(layers)
 

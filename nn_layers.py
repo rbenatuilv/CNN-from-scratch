@@ -38,7 +38,7 @@ class CNNLayer(Layer):
         ker_depth = self.kernel_shape[0]
         input_depth = self.kernel_shape[1]
 
-        self.output_tensor = np.zeros(*self.output_shape)
+        self.output_tensor = np.zeros(self.output_shape)
         for i in range(ker_depth):
             for j in range(input_depth):
                 self.output_tensor[i] += correlate(input_tensor[j], self.weights[i][j], mode='valid')
@@ -58,7 +58,7 @@ class DenseLayer(Layer):
 
     def forward(self, input_tensor):
         self.input_tensor = input_tensor
-        self.output_tensor = np.dot(input_tensor, self.weights) + self.bias
+        self.output_tensor = np.dot(input_tensor.T, self.weights) + self.bias
         return self.output_tensor
     
     def backward(self, gradient_tensor, lr):
@@ -87,7 +87,7 @@ class ReshapeLayer(Layer):
     def forward(self, input_tensor):
         self.input_tensor = input_tensor
         self.output_tensor = np.reshape(self.input_tensor, self.output_shape)
-        return self.output_shape
+        return self.output_tensor
 
     def backward(self, gradient_tensor):
         return np.reshape(gradient_tensor, self.input_shape)

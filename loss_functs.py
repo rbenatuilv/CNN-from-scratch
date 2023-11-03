@@ -5,7 +5,7 @@ def cross_entropy_loss(prediction, label):
     """
     Implementación de la función de pérdida de entropía cruzada.
     """
-    return -np.sum(np.multiply(label, np.log(prediction)))
+    return -np.sum(np.multiply(label.T, np.log(prediction)))
 
 def delta_cross_entropy(prediction, label):
     """

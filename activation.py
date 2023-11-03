@@ -41,7 +41,7 @@ def softmax_forward(input_tensor):
     """
     Implementación de la función de activación softmax.
     """
-    return np.exp(input_tensor) / np.sum(np.exp(input_tensor), axis=1, keepdims=True)
+    return np.exp(input_tensor) / np.sum(np.exp(input_tensor))
 
 def softmax_backward(error_tensor, input_tensor):
     """

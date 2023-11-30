@@ -49,7 +49,7 @@ class ConvNeuralNet:
             except KeyError:
                 raise KeyError(f'Layer type {layer["type"]} not implemented')
 
-    def fit(self, x_train, y_train, x_val, y_val, epochs, patience=2, decay_rate=1):
+    def fit(self, x_train, y_train, x_val, y_val, epochs, batch_size=1000, patience=2, decay_rate=0.1):
         """
         Esta función se encarga de entrenar la red neuronal.
         """
@@ -61,6 +61,10 @@ class ConvNeuralNet:
         val_errors = []
 
         for e in range(epochs):
+            perm = np.random.permutation(len(x_train))
+            x_train = x_train[perm]
+            y_train = y_train[perm]
+
             train_error = 0
             for x, y in tqdm(zip(x_train, y_train), desc=f'Epoch {e + 1}', total=len(x_train)):
                 pred = self.predict(x)
@@ -95,6 +99,15 @@ class ConvNeuralNet:
 
         return train_errors, val_errors
     
+    def predict(self, input_data):
+        """
+        Esta función se encarga de realizar la predicción de la red neuronal.
+        """
+        output_pred = input_data
+        for layer in self.layers:
+            output_pred = layer.forward(output_pred)
+        return output_pred
+
     def set_weights(self, weights):
         """
         Esta función se encarga de asignar los pesos a la red neuronal.
@@ -107,16 +120,6 @@ class ConvNeuralNet:
         Esta función se encarga de obtener los pesos de la red neuronal.
         """
         return [layer.get_weights() for layer in self.layers]
-
-
-    def predict(self, input_data):
-        """
-        Esta función se encarga de realizar la predicción de la red neuronal.
-        """
-        output_pred = input_data
-        for layer in self.layers:
-            output_pred = layer.forward(output_pred)
-        return output_pred
     
     def save(self, path):
         """
@@ -125,29 +128,27 @@ class ConvNeuralNet:
         import pickle
 
         with open(path, 'wb') as f:
-            pickle.dump([layer.get_weights() for layer in self.layers], f)
+            pickle.dump(self.get_weights(), f)
 
 
 if __name__ == '__main__':
     from keras.datasets import cifar10
     import numpy as np
     import matplotlib.pyplot as plt
-    
+
 
     layers = [
         ('conv', {'kernel_size': 3, 'depth': 5}),
         ('maxpool', {'kernel_size': 2}),
         ('activation', {'activation': 'relu'}),
-        ('conv', {'kernel_size': 2, 'depth': 3}),
-        ('maxpool', {'kernel_size': 2}),
-        ('activation', {'activation': 'relu'}),
+
         ('reshape', {'output_shape': 'flatten'}),
         ('dense', {'neurons': 10}),
         ('activation', {'activation': 'softmax'})
     ]
 
     loss = 'cross_entropy'
-    lr = 0.001
+    lr = 0.01
     input_shape = (3, 32, 32)
 
     model = ConvNeuralNet(layers, loss, lr, input_shape)

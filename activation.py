@@ -35,20 +35,33 @@ def sigmoid_backward(error_tensor, input_tensor):
     """
     Derivada de la función de activación sigmoid.
     """
-    return np.multiply(error_tensor, np.multiply(sigmoid_forward(input_tensor), 1 - sigmoid_forward(input_tensor)))
+    forward = sigmoid_forward(input_tensor)
+    return np.multiply(error_tensor, np.multiply(forward, 1 - forward))
 
 def softmax_forward(input_tensor):
     """
     Implementación de la función de activación softmax.
     """
-    return np.exp(input_tensor) / np.sum(np.exp(input_tensor))
+    input_tensor -= np.max(input_tensor)
+    exps = np.exp(input_tensor)
+    return exps / np.sum(exps)
 
 def softmax_backward(error_tensor, input_tensor):
     """
     Derivada de la función de activación softmax.
     """
-    return np.multiply(error_tensor, softmax_forward(input_tensor) * (1 - softmax_forward(input_tensor)))
+    # Calculamos la matriz de Jacobianos
+    jacobian_matrix = np.zeros((input_tensor.shape[0], input_tensor.shape[0]))
+    forward = softmax_forward(input_tensor)
 
+    for i in range(input_tensor.shape[0]):
+        for j in range(input_tensor.shape[0]):
+            if i == j:
+                jacobian_matrix[i][j] = forward[i] * (1 - forward[i])
+            else:
+                jacobian_matrix[i][j] = -forward[i] * forward[j]
+
+    return np.dot(jacobian_matrix, error_tensor)
 
 
 ACTIVATION = {

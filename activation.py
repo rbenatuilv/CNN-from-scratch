@@ -50,7 +50,6 @@ def softmax_backward(error_tensor, input_tensor):
     """
     Derivada de la función de activación softmax.
     """
-    # Calculamos la matriz de Jacobianos
     jacobian_matrix = np.zeros((input_tensor.shape[0], input_tensor.shape[0]))
     forward = softmax_forward(input_tensor)
 

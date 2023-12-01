@@ -1,8 +1,8 @@
-from nn_layers import CNNLayer, MaxPoolLayer, Activation, ReshapeLayer, DenseLayer
+from nn_layers import CNNLayer, MaxPoolLayer, Activation, ReshapeLayer, DenseLayer, Dropout
 from loss_functs import LOSS
 from tqdm import tqdm
-from aux_functions import preprocess
 import math
+import numpy as np
 
 
 class ConvNeuralNet:
@@ -10,10 +10,11 @@ class ConvNeuralNet:
     Esta clase se encarga de definir la estructura de la red neuronal convolucional.
     """
     
-    def __init__(self, layers, loss, lr, input_shape):
+    def __init__(self, layers, loss, lr, input_shape, name=None):
 
         self.input_shape = input_shape
         self.set_layers(layers)
+        self.name = name
 
         try:
             self.loss = LOSS[loss]
@@ -31,13 +32,14 @@ class ConvNeuralNet:
             'maxpool': MaxPoolLayer,
             'activation': Activation,
             'reshape': ReshapeLayer,
-            'dense': DenseLayer
+            'dense': DenseLayer,
+            'dropout': Dropout
         }
 
         input_shape = self.input_shape
         self.layers = []
 
-        for elem in tqdm(layers, desc='Setting layers:', total=len(layers)):
+        for elem in tqdm(layers, desc='Setting layers', total=len(layers)):
             layer_type, content = elem
             content['input_shape'] = input_shape
 
@@ -49,16 +51,18 @@ class ConvNeuralNet:
             except KeyError:
                 raise KeyError(f'Layer type {layer["type"]} not implemented')
 
-    def fit(self, x_train, y_train, x_val, y_val, epochs, batch_size=1000, patience=2, decay_rate=0.1):
+    def fit(self, x_train, y_train, validation_data, epochs, patience=2, decay_rate=0.01, verbose=True):
         """
         Esta función se encarga de entrenar la red neuronal.
         """
+        x_val, y_val = validation_data
+
         best_error = float('inf')
         best_weights = None
         no_improvement_epochs = 0
 
-        train_errors = []
-        val_errors = []
+        train_errors = [0]
+        val_errors = [0]
 
         for e in range(epochs):
             perm = np.random.permutation(len(x_train))
@@ -66,19 +70,23 @@ class ConvNeuralNet:
             y_train = y_train[perm]
 
             train_error = 0
-            for x, y in tqdm(zip(x_train, y_train), desc=f'Epoch {e + 1}', total=len(x_train)):
+            for x, y in tqdm(zip(x_train, y_train), desc=f'Epoch {e + 1}', total=len(x_train), disable=not verbose):
                 pred = self.predict(x)
                 train_error += self.loss['loss'](pred, y)
                 gradient = self.loss['delta'](pred, y)
-
                 for layer in reversed(self.layers):
                     gradient = layer.backward(gradient, self.lr)
             
             train_error /= len(x_train)
+
+            if train_error > train_errors[-1]:
+                self.lr *= math.exp(-decay_rate * (e + 1))
+
             train_errors.append(train_error)
 
             val_error = np.mean([self.loss['loss'](self.predict(x), y) 
-                                 for x, y in tqdm(zip(x_val, y_val), desc='Validation', total=len(x_val))])
+                                 for x, y in tqdm(zip(x_val, y_val), desc='Validation', 
+                                                  total=len(x_val), disable=not verbose)])
             val_errors.append(val_error)
 
             print(f'Epoch {e + 1} train error: {train_error}, validation error: {val_error}\n')
@@ -94,8 +102,9 @@ class ConvNeuralNet:
                 print(f'Early stopping on epoch {e + 1}')
                 self.set_weights(best_weights)
                 break
-
-            self.lr *= math.exp(-decay_rate * (e + 1))
+        
+        train_errors = train_errors[1:]
+        val_errors = val_errors[1:]
 
         return train_errors, val_errors
     
@@ -107,6 +116,17 @@ class ConvNeuralNet:
         for layer in self.layers:
             output_pred = layer.forward(output_pred)
         return output_pred
+    
+    def check_precision(self, x_test, y_test):
+        """
+        Esta función se encarga de calcular la precisión de la red neuronal.
+        """
+        correct = 0
+        for x, y in tqdm(zip(x_test, y_test), desc='Testing', total=len(x_test)):
+            pred = self.predict(x)
+            if np.argmax(pred) == np.argmax(y):
+                correct += 1
+        return correct / len(x_test)
 
     def set_weights(self, weights):
         """
@@ -121,56 +141,32 @@ class ConvNeuralNet:
         """
         return [layer.get_weights() for layer in self.layers]
     
-    def save(self, path):
+    def save(self):
         """
         Esta función se encarga de guardar los pesos de la red neuronal.
         """
+
+        if self.name is None:
+            path = 'weights.pkl'
+        else:
+            path = f'weights_{self.name}.pkl'
+
         import pickle
 
         with open(path, 'wb') as f:
             pickle.dump(self.get_weights(), f)
 
+    def load(self):
+        """
+        Esta función se encarga de cargar los pesos de la red neuronal.
+        """
+        if self.name is None:
+            path = 'weights.pkl'
+        else:
+            path = f'weights_{self.name}.pkl'
 
-if __name__ == '__main__':
-    from keras.datasets import cifar10
-    import numpy as np
-    import matplotlib.pyplot as plt
-
-
-    layers = [
-        ('conv', {'kernel_size': 3, 'depth': 5}),
-        ('maxpool', {'kernel_size': 2}),
-        ('activation', {'activation': 'relu'}),
-
-        ('reshape', {'output_shape': 'flatten'}),
-        ('dense', {'neurons': 10}),
-        ('activation', {'activation': 'softmax'})
-    ]
-
-    loss = 'cross_entropy'
-    lr = 0.01
-    input_shape = (3, 32, 32)
-
-    model = ConvNeuralNet(layers, loss, lr, input_shape)
-
-    if input('Load weights? [y/n] ') == 'y':
         import pickle
 
-        with open('weights.pkl', 'rb') as f:
+        with open(path, 'rb') as f:
             weights = pickle.load(f)
-            model.set_weights(weights)
-
-    (x_train, y_train), (x_test, y_test) = cifar10.load_data()
-    x_train_channels, y_train_encoded, x_test_channels, y_test_encoded, x_val, y_val = preprocess(x_train, y_train, x_test, y_test)
-
-    t_err, val_err = model.fit(x_train_channels, y_train_encoded, x_val, y_val, epochs=10, patience=3)
-    model.save('weights.pkl')
-
-    
-    fig, ax = plt.subplots()
-    ax.plot(t_err, label='Train error')
-    ax.plot(val_err, label='Validation error')
-    ax.set_xlabel('Epoch')
-    ax.set_ylabel('Error')
-    ax.legend()
-    plt.show()
+            self.set_weights(weights)

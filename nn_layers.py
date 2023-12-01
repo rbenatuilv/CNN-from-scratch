@@ -1,6 +1,7 @@
 import numpy as np
 from aux_functions import correlate, convolve
 from activation import ACTIVATION
+from optimization import Adam
 
 
 class Layer:
@@ -26,6 +27,8 @@ class Layer:
 class CNNLayer(Layer):
     def __init__(self, input_shape: tuple[int], kernel_size: int, depth: int):
         super().__init__(input_shape)
+
+        self.opt = Adam()
 
         input_depth = input_shape[0]
         self.kernel_shape = (depth, input_depth, kernel_size, kernel_size)
@@ -55,6 +58,11 @@ class CNNLayer(Layer):
         return self.output_tensor
 
     def backward(self, gradient_tensor, lr):
+
+        assert gradient_tensor.shape == self.output_shape
+
+        self.opt.learning_rate = lr
+
         ker_depth = self.kernel_shape[0]
         input_depth = self.kernel_shape[1]
 
@@ -66,6 +74,9 @@ class CNNLayer(Layer):
                 ker_grad_tensor[i][j] = correlate(self.input_tensor[j], gradient_tensor[i], mode='valid')
                 input_grad_tensor[j] += convolve(gradient_tensor[i], self.weights[i][j], mode='full')
 
+        # self.weights -= self.opt.update(self.weights, ker_grad_tensor)
+        # self.bias -= lr * gradient_tensor
+
         self.weights -= lr * ker_grad_tensor
         self.bias -= lr * gradient_tensor
 
@@ -74,8 +85,9 @@ class CNNLayer(Layer):
 
 class DenseLayer(Layer):
     def __init__(self, input_shape, neurons):
-        self.weights = np.random.randn(neurons, input_shape[0]) * np.sqrt(1 / input_shape[0])
+        self.weights = np.random.randn(neurons, input_shape[0]) * np.sqrt(2. / input_shape[0])
         self.bias = np.random.randn(neurons, 1)
+        self.opt = Adam()
 
     def forward(self, input_tensor):
         self.input_tensor = input_tensor
@@ -84,8 +96,16 @@ class DenseLayer(Layer):
         return self.output_tensor
     
     def backward(self, gradient_tensor, lr):
+        assert gradient_tensor.shape == self.output_tensor.shape
+
+        self.opt.learning_rate = lr
+
         input_grad_tensor = np.dot(self.weights.T, gradient_tensor)
         weight_grad_tensor = np.dot(gradient_tensor, self.input_tensor.T)
+
+        # self.weights -= self.opt.update(self.weights, weight_grad_tensor)
+        # self.bias -= lr * gradient_tensor
+
         self.weights -= lr * weight_grad_tensor
         self.bias -= lr * gradient_tensor
 
@@ -115,6 +135,8 @@ class MaxPoolLayer(Layer):
         return output_tensor
 
     def backward(self, gradient_tensor, lr):
+        assert gradient_tensor.shape == self.get_output_shape()
+
         upsampled_gradient = gradient_tensor.repeat(self.kernel_size, axis=-1).repeat(self.kernel_size, axis=-2)
         max_mask = self.input_tensor == self.max_values.repeat(self.kernel_size, axis=-1).repeat(self.kernel_size, axis=-2)
         back_tensor = upsampled_gradient * max_mask
@@ -140,6 +162,8 @@ class ReshapeLayer(Layer):
         return self.output_tensor
 
     def backward(self, gradient_tensor, lr):
+        assert gradient_tensor.shape == self.output_shape
+
         return np.reshape(gradient_tensor, self.input_shape)
     
     def get_output_shape(self):
@@ -160,7 +184,27 @@ class Activation(Layer):
         return self.output_tensor
     
     def backward(self, gradient_tensor, lr=0):
+        assert gradient_tensor.shape == self.input_tensor.shape
+
         return self.activation['backward'](gradient_tensor, self.input_tensor)
+    
+    def get_output_shape(self):
+        return self.input_shape
+
+
+class Dropout(Layer):
+    def __init__(self, rate, **kwargs):
+        super().__init__(**kwargs)
+        self.rate = rate
+        self.input_tensor = None
+
+    def forward(self, input_tensor):
+        self.input_tensor = input_tensor
+        self.mask = np.random.binomial(1, 1 - self.rate, size=input_tensor.shape) / (1 - self.rate)
+        return input_tensor * self.mask
+
+    def backward(self, error_tensor, lr=0):
+        return error_tensor * self.mask
     
     def get_output_shape(self):
         return self.input_shape
